@@ -1,0 +1,6 @@
+NRC,Nombre,Malla,Tipo,Profesor_ID,Cupos
+FP1001,Desarrollo TI (Teoría),Ambas,Teórico,P01,30
+FP1002,Desarrollo TI (Práctica),Ambas,Práctico,P01,30
+FP2001,Big Data,2024,Teórico,P02,25
+FP1003,Bases de Datos,2019,Teórico,P03,20
+FP1004,Bases de Datos (Convalidable),Ambas,Teórico,P03,15
