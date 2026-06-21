@@ -36,6 +36,7 @@ aliases:
 |-----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Vista global de arquitectura, diagramas de flujo y patrones de diseño |
 | [MODULES.md](MODULES.md) | Diccionario detallado de módulos, funciones y dependencias |
+| [guia_impresion_3d.md](guia_impresion_3d.md) | Guía de impresión 3D y configuración de perfiles en Creality Print |
 
 ---
 
