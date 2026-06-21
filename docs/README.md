@@ -37,6 +37,7 @@ aliases:
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Vista global de arquitectura, diagramas de flujo y patrones de diseño |
 | [MODULES.md](MODULES.md) | Diccionario detallado de módulos, funciones y dependencias |
 | [guia_impresion_3d.md](guia_impresion_3d.md) | Guía de impresión 3D y configuración de perfiles en Creality Print |
+| [guia_openscad.md](guia_openscad.md) | Guía completa de OpenSCAD: del cubo al robot cuadrúpedo y simulaciones |
 
 ---
 
@@ -68,6 +69,7 @@ aliases:
 
 - [Ver Arquitectura](ARCHITECTURE.md)
 - [Ver Módulos](MODULES.md)
+- [Guía OpenSCAD](guia_openscad.md) (y [PDF compilado](guia_openscad.pdf))
 - [Task Board](_Agent_Sync/Task_Board)
 - [Active Context](_Agent_Sync/Active_Context)
 
