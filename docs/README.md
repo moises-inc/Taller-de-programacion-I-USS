@@ -38,6 +38,8 @@ aliases:
 | [MODULES.md](MODULES.md) | Diccionario detallado de módulos, funciones y dependencias |
 | [guia_impresion_3d.md](guia_impresion_3d.md) | Guía de impresión 3D y configuración de perfiles en Creality Print |
 | [guia_openscad.md](guia_openscad.md) | Guía completa de OpenSCAD: del cubo al robot cuadrúpedo y simulaciones |
+| [informe\_proyecto\_spiderbot.tex](informe_proyecto_spiderbot.tex) / [PDF](informe_proyecto_spiderbot.pdf) | Informe técnico final del proyecto SpiderBot (evaluación Solemne 3) |
+| [presentacion\_hall\_spiderbot.tex](presentacion_hall_spiderbot.tex) / [PDF](presentacion_hall_spiderbot.pdf) | Presentación LaTeX Beamer de apoyo visual para el hall |
 
 ---
 
@@ -70,6 +72,8 @@ aliases:
 - [Ver Arquitectura](ARCHITECTURE.md)
 - [Ver Módulos](MODULES.md)
 - [Guía OpenSCAD](guia_openscad.md) (y [PDF compilado](guia_openscad.pdf))
+- [Informe Técnico Final (PDF)](informe_proyecto_spiderbot.pdf)
+- [Presentación del Hall (PDF)](presentacion_hall_spiderbot.pdf)
 - [Task Board](_Agent_Sync/Task_Board)
 - [Active Context](_Agent_Sync/Active_Context)
 
