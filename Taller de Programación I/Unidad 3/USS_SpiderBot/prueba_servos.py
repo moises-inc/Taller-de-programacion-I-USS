@@ -1,5 +1,5 @@
 # ============================================================
-# USS SPIDERBOT — Script de Prueba de Servomotores (MicroPython)
+# USS SPIDERBOT — Script de Prueba de Servomotores (ESP32 / ESP8266)
 # Diseñado para ejecutarse interactiva o automáticamente en Thonny IDE.
 # ============================================================
 
@@ -19,13 +19,30 @@ NOMBRES_SERVOS = {
     7: "Canal 7 (Pata RR - Fémur/Rodilla)"
 }
 
-# Mapeo de pines GPIO directos de la ESP32 (por si se prueba sin PCA9685 o en Wokwi)
-PINE_GPIO_DIRECTOS = {
-    0: 13, 1: 12, # Pata FR
-    2: 15, 3: 2,  # Pata FL
-    4: 4,  5: 5,  # Pata RL
-    6: 23, 7: 25  # Pata RR
-}
+# Auto-detectar plataforma para asignar pines directos seguros
+es_esp8266 = sys.platform == "esp8266"
+
+# Forzar modo de control directo por GPIO (sin buscar la controladora PCA9685 I2C)
+# Útil si tienes los servos conectados directamente a D1/D2 y no quieres usar I2C.
+FORZAR_GPIO_DIRECTO = True
+
+if es_esp8266:
+    # Mapeo de los 8 servos directamente a los pines físicos indicados:
+    # D0 -> GPIO16, D1 -> GPIO5, D2 -> GPIO4, D4 -> GPIO2
+    # D5 -> GPIO14, D6 -> GPIO12, D7 -> GPIO13, D8 -> GPIO15
+    PINE_GPIO_DIRECTOS = {
+        0: 16, 1: 5,  # D0, D1 (Pata FR - Coxa y Fémur)
+        2: 4,  3: 2,  # D2, D4 (Pata FL - Coxa y Fémur)
+        4: 14, 5: 12, # D5, D6 (Pata RL - Coxa y Fémur)
+        6: 13, 7: 15  # D7, D8 (Pata RR - Coxa y Fémur)
+    }
+else:
+    PINE_GPIO_DIRECTOS = {
+        0: 13, 1: 12, # Pata FR
+        2: 15, 3: 2,  # Pata FL
+        4: 4,  5: 5,  # Pata RL
+        6: 23, 7: 25  # Pata RR
+    }
 
 # Clase mínima para PCA9685
 class PCA9685Driver:
@@ -72,10 +89,18 @@ class GPIOServoDriver:
     def set_angle(self, channel, angle):
         if channel in self.pwms:
             angle = max(0, min(180, angle))
-            min_duty = 1638  # ~0.5ms (1638/65535)
-            max_duty = 8192  # ~2.5ms (8192/65535)
-            duty = int(min_duty + (angle / 180.0) * (max_duty - min_duty))
-            self.pwms[channel].duty_u16(duty)
+            if es_esp8266:
+                # El PWM del ESP8266 en MicroPython usa rango 0-1023 (10-bit)
+                min_duty = 30   # ~0.6ms (30/1023)
+                max_duty = 130  # ~2.5ms (130/1023)
+                duty = int(min_duty + (angle / 180.0) * (max_duty - min_duty))
+                self.pwms[channel].duty(duty)
+            else:
+                # ESP32 usa rango 0-65535 (16-bit)
+                min_duty = 1638  # ~0.5ms (1638/65535)
+                max_duty = 8192  # ~2.5ms (8192/65535)
+                duty = int(min_duty + (angle / 180.0) * (max_duty - min_duty))
+                self.pwms[channel].duty_u16(duty)
 
 def realizar_barrido(driver, canal, nombre):
     print(f"\n---> Iniciando barrido en: {nombre}")
@@ -98,23 +123,40 @@ def realizar_barrido(driver, canal, nombre):
 
 def main():
     print("=====================================================")
-    print("          Prueba de Servomotores - USS SpiderBot      ")
+    print(f"  Prueba de Servomotores - Platform: {sys.platform.upper()}   ")
     print("=====================================================")
     
-    # Inicializar I2C (SDA=21, SCL=22)
-    print("Iniciando bus I2C en SDA=21, SCL=22...")
-    i2c = I2C(0, sda=Pin(21), scl=Pin(22), freq=400000)
-    
-    dispositivos = i2c.scan()
-    print("Dispositivos I2C encontrados:", [hex(d) for d in dispositivos])
-    
-    pca_detectado = 0x40 in dispositivos
+    # Inicializar I2C dinámicamente según la plataforma o usar GPIO directo directamente
+    pca_detectado = False
+    if es_esp8266 and FORZAR_GPIO_DIRECTO:
+        print("[INFO] Modo GPIO Directo activo. Omitiendo inicialización de I2C (evita conflictos en D1/D2).")
+    else:
+        if es_esp8266:
+            # ESP8266 (NodeMCU): SCL=GPIO5 (D1), SDA=GPIO4 (D2)
+            print("Iniciando bus I2C de Software (SCL=Pin 5 / D1, SDA=Pin 4 / D2)...")
+            try:
+                i2c = I2C(scl=Pin(5), sda=Pin(4), freq=100000)
+                dispositivos = i2c.scan()
+                print("Dispositivos I2C encontrados:", [hex(d) for d in dispositivos])
+                pca_detectado = 0x40 in dispositivos
+            except Exception as e:
+                print("[WARNING] Falló escaneo I2C:", e)
+        else:
+            # ESP32: SCL=GPIO22, SDA=GPIO21
+            print("Iniciando bus I2C de Hardware (SCL=Pin 22, SDA=Pin 21)...")
+            try:
+                i2c = I2C(0, sda=Pin(21), scl=Pin(22), freq=400000)
+                dispositivos = i2c.scan()
+                print("Dispositivos I2C encontrados:", [hex(d) for d in dispositivos])
+                pca_detectado = 0x40 in dispositivos
+            except Exception as e:
+                print("[WARNING] Falló escaneo I2C:", e)
     
     if pca_detectado:
-        print("[INFO] PCA9685 detectado en 0x40. Usando driver I2C.")
+        print("[OK] PCA9685 detectado en 0x40. Usando driver I2C.")
         driver = PCA9685Driver(i2c, address=0x40)
     else:
-        print("[INFO] PCA9685 no detectado. Conmutando a modo de prueba GPIO directa.")
+        print("[INFO] Conmutando a modo de prueba GPIO directa (8 servos activos).")
         driver = GPIOServoDriver(PINE_GPIO_DIRECTOS)
         
     print("\nModos de prueba:")
@@ -125,18 +167,20 @@ def main():
     try:
         seleccion = input("\nSeleccione una opción (1, 2 o 3): ").strip()
     except Exception:
-        seleccion = "1" # Fallback si Thonny no recibe stdin interactiva en la primera
+        seleccion = "1" # Fallback
+        
+    limite_canales = 8
         
     if seleccion == "3":
-        print("\nColocando todos los servos (0-7) a 90 grados...")
-        for ch in range(8):
+        print(f"\nColocando servos (0-{limite_canales-1}) a 90 grados...")
+        for ch in range(limite_canales):
             driver.set_angle(ch, 90)
             time.sleep_ms(100)
         print("[OK] Todos los servos centrados a 90°. ¡Listo para el acople mecánico!")
         
     elif seleccion == "2":
         print("\n--- PRUEBA INTERACTIVA PASO A PASO ---")
-        for ch in range(8):
+        for ch in range(limite_canales):
             nombre = NOMBRES_SERVOS.get(ch, f"Canal {ch}")
             print(f"\nSiguiente servo a probar: {nombre}")
             input("Presione ENTER para iniciar el barrido del servo...")
@@ -145,7 +189,7 @@ def main():
         
     else:
         print("\n--- PRUEBA AUTOMÁTICA DE BARRIDO ---")
-        for ch in range(8):
+        for ch in range(limite_canales):
             nombre = NOMBRES_SERVOS.get(ch, f"Canal {ch}")
             realizar_barrido(driver, ch, nombre)
             time.sleep_ms(200)
