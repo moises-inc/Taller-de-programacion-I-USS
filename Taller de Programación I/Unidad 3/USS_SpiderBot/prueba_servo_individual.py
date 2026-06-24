@@ -1,29 +1,30 @@
 # ============================================================
-# USS SPIDERBOT — Prueba de 8 Servomotores (ESP8266)
-# Diseñado para probar servos en los pines D0, D1, D2, D4, D5, D6, D7 y D8.
+# USS SPIDERBOT — Prueba de 8 Servomotores Individuales (ESP32)
+# Diseñado para probar servos en los pines GPIO directos de la ESP32:
+# FR_C (13), FR_F (12), FL_C (15), FL_F (2)
+# RL_C (4), RL_F (5), RR_C (23), RR_F (25)
 # Ejecutar en Thonny e ingresar los comandos en la consola.
 # ============================================================
 
 from machine import Pin, PWM
 import time
+import sys
 
-# Mapeo de pines físicos de la ESP8266 (NodeMCU / WeMos D1 Mini)
-# D0 -> GPIO 16, D1 -> GPIO 5, D2 -> GPIO 4, D4 -> GPIO 2
-# D5 -> GPIO 14, D6 -> GPIO 12, D7 -> GPIO 13, D8 -> GPIO 15
+# Mapeo de pines físicos de la ESP32
 PINES_ACTIVOS = {
-    "D0": 16,
-    "D1": 5,
-    "D2": 4,
-    "D4": 2,
-    "D5": 14,
-    "D6": 12,
-    "D7": 13,
-    "D8": 15
+    "FR_C": 13,  # FR Coxa/Cadera
+    "FR_F": 12,  # FR Fémur/Rodilla
+    "FL_C": 15,  # FL Coxa/Cadera
+    "FL_F": 2,   # FL Fémur/Rodilla
+    "RL_C": 4,   # RL Coxa/Cadera
+    "RL_F": 5,   # RL Fémur/Rodilla
+    "RR_C": 23,  # RR Coxa/Cadera
+    "RR_F": 25   # RR Fémur/Rodilla
 }
 
 servos = {}
 
-print("Inicializando canales PWM a 50Hz...")
+print("Inicializando canales PWM a 50Hz para ESP32 (Resolución de 16-bit)...")
 for nombre, pin_num in PINES_ACTIVOS.items():
     try:
         servos[nombre] = PWM(Pin(pin_num), freq=50)
@@ -40,13 +41,15 @@ def mover_servo(nombre, angulo):
     # Limitar el rango por seguridad
     angulo = max(0, min(180, angulo))
     
-    # Rango calibrado de Duty (10-bit en ESP8266: 0-1023)
-    min_duty = 30  # ~0.6ms (0 grados)
-    max_duty = 130 # ~2.5ms (180 grados)
+    # Rango calibrado de Duty (16-bit en ESP32: 0-65535)
+    # min_duty = 1638 (~0.5ms para 0 grados)
+    # max_duty = 8192 (~2.5ms para 180 grados)
+    min_duty = 1638
+    max_duty = 8192
     
     duty = int(min_duty + (angulo / 180.0) * (max_duty - min_duty))
-    servos[nombre].duty(duty)
-    print(f"[MOVER] {nombre} -> Ángulo: {angulo}° | Duty: {duty}")
+    servos[nombre].duty_u16(duty)
+    print(f"[MOVER] {nombre} (GPIO {PINES_ACTIVOS[nombre]}) -> Ángulo: {angulo}° | Duty: {duty}")
 
 def mover_todos(angulo):
     """Mueve todos los servos configurados al mismo ángulo"""
@@ -70,11 +73,14 @@ def main():
         return
         
     print("\n=======================================================")
-    print("  Prueba Controladora de 8 Servos - ESP8266 (D0, D1, D2, D4, D5, D6, D7, D8)  ")
+    print("  Prueba Controladora de 8 Servos Individual - ESP32   ")
     print("=======================================================")
     print("Opciones de comando:")
     print("  1. Escribe un ángulo (0-180) para mover TODOS los servos (ej: 90).")
-    print("  2. Escribe '<PIN> <ANGULO>' para mover uno solo (ej: D2 45 o D5 120).")
+    print("  2. Escribe '<PATA_SERVO> <ANGULO>' para mover uno solo.")
+    print("     Opciones de PATA_SERVO:")
+    print(f"       {list(PINES_ACTIVOS.keys())}")
+    print("     Ejemplos: FR_C 45, RR_F 120")
     print("  3. Escribe 'b' para iniciar un barrido secuencial de prueba.")
     print("  4. Escribe 'salir' para terminar.")
     
@@ -93,7 +99,7 @@ def main():
             elif entrada == '':
                 continue
             
-            # Intentar procesar comandos del tipo "D2 45"
+            # Intentar procesar comandos del tipo "FR_C 45"
             elif " " in entrada:
                 partes = entrada.split()
                 if len(partes) == 2:
@@ -108,9 +114,9 @@ def main():
                         except ValueError:
                             print("[ERROR] El ángulo debe ser un número entero.")
                     else:
-                        print(f"[ERROR] Pin no válido. Opciones: {list(PINES_ACTIVOS.keys())}")
+                        print(f"[ERROR] Servo no válido. Opciones: {list(PINES_ACTIVOS.keys())}")
                 else:
-                    print("[ERROR] Formato incorrecto. Use '<PIN> <ANGULO>' (ej: D2 90).")
+                    print("[ERROR] Formato incorrecto. Use '<PATA_SERVO> <ANGULO>' (ej: FR_C 90).")
                     
             # Intentar procesar un ángulo global (ej: 90)
             else:
@@ -121,7 +127,7 @@ def main():
                     else:
                         print("[ALERTA] Ángulo fuera de rango (0-180).")
                 except ValueError:
-                    print("[ERROR] Comando no reconocido. Escriba un número, '<PIN> <ANGULO>', 'b' o 'salir'.")
+                    print("[ERROR] Comando no reconocido. Escriba un número, '<PATA_SERVO> <ANGULO>', 'b' o 'salir'.")
                     
         except ValueError:
             print("[ERROR] Entrada no válida.")
