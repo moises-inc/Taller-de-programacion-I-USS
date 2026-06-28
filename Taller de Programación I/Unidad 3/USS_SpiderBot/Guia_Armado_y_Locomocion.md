@@ -16,7 +16,8 @@ El **USS SpiderBot** es un robot caminador cuadrúpedo de **8 grados de libertad
 *   **1x Unidad de Medida Inercial (IMU) GY-521 (MPU6050):** Acelerómetro y giroscopio de 6 ejes que mide la inclinación (Pitch y Roll) para la auto-estabilización.
 *   **1x Sensor de Distancia Ultrasónico HC-SR04:** Sensor de prevención para detener la marcha si hay obstáculos a menos de 15 cm.
 *   **1x Buzzer Activo (5V):** Actuador acústico para emitir pitidos de encendido, alertas de colisión inminente y alarmas de inestabilidad extrema.
-*   **1x Batería Li-ion 2S (7.4V nominal) + Regulador de Voltaje Step-Down (UBEC 5V/3A):** Fuente de energía de alta capacidad y regulador de voltaje para aislar la potencia de los servos.
+*   **2x Porta Pilas Duales 2x18650 (4 celdas Li-ion 18650 de 3.7V en total):** Dos packs independientes de 2 celdas 18650 en serie, cada uno proveyendo 7.4V nominales para alimentación redundante y aislada.
+*   **2x Convertidores Step-Down LM2596:** Reguladores de voltaje reductores ajustables. El LM2596 #1 se regula a 6.0V para el riel de potencia de los servos SG90/MG90S, y el LM2596 #2 se regula a 5.0V para alimentar la ESP32 y los sensores.
 
 ---
 
@@ -25,8 +26,8 @@ El **USS SpiderBot** es un robot caminador cuadrúpedo de **8 grados de libertad
 ### IMPORTANTE: El Aislamiento de Potencia
 Los servomotores SG90/MG90S pueden consumir picos de corriente superiores a **500 mA** cada uno cuando realizan esfuerzo mecánico (por ejemplo, al levantar el peso del robot).
 *   **Regla de Oro:** **NUNCA** alimente los servos desde las salidas de 3.3V o 5V del microcontrolador ESP32. Hacerlo causará caídas de tensión (brownouts) que reiniciarán constantemente el procesador.
-*   **Solución:** Los servomotores deben conectarse directamente a la bornera de alimentación externa del módulo **PCA9685** (marcada como V+ y GND), la cual se alimenta a través de la salida de 5V del regulador UBEC de 3A conectado a la batería.
-*   **GND Común:** Conecte el terminal GND del ESP32, el terminal GND del bus de señal del PCA9685 y el terminal GND de la bornera de alimentación externa del regulador en un punto común para establecer una referencia de voltaje unificada.
+*   **Solución (Alimentación Dual Independiente):** Se utilizan dos convertidores LM2596 alimentados desde dos packs 2x18650 independientes. El LM2596 #1 se regula a **6.0V** para el riel de potencia de los servos, y el LM2596 #2 se regula a **5.0V** para la ESP32 y sensores. Cada convertidor opera sobre su propio pack de baterías, aislando eléctricamente los transitorios de los servos del microcontrolador.
+*   **GND Común:** Conecte el terminal GND de la ESP32, el GND de salida de ambos LM2596 y el cable de tierra de todos los servos en un nodo común para establecer una referencia de voltaje unificada.
 
 ### Tabla de Conexiones del ESP32
 
@@ -38,7 +39,7 @@ El bus de comunicación I2C es compartido por el driver PCA9685 y la IMU MPU6050
 | **MPU6050 (IMU)** | SDA / SCL | GPIO 21 / GPIO 22 | I2C (Compartido) | Lectura de inclinación angular en grados |
 | **PCA9685 (Driver)** | VCC / GND | 3.3V / GND | Alimentación (Lógica) | Energía para el procesador interno I2C |
 | **PCA9685 (Driver)** | SDA / SCL | GPIO 21 / GPIO 22 | I2C (Compartido) | Comandos de posición angular para servos |
-| **PCA9685 (Driver)** | V+ (Bornera) | Salida 5V (UBEC) | Alimentación (Potencia)| Alimentación dedicada para los 8 servos |
+| **Servos VCC** | Riel de potencia | LM2596 \#1 Out (6.0V) | Alimentación (Potencia)| Alimentación dedicada para los 8 servos |
 | **HC-SR04 (Sonar)** | VCC / GND | 5V / GND | Alimentación | El transductor de ultrasonido requiere 5V |
 | **HC-SR04 (Sonar)** | TRIG / ECHO | GPIO 18 / GPIO 19 | Digital I/O | Control de emisión y lectura de eco del sonar |
 | **Buzzer Activo** | Terminal + / - | GPIO 14 / GND | Digital OUT | Activación y modulación de tonos de alerta |
@@ -50,35 +51,15 @@ El bus de comunicación I2C es compartido por el driver PCA9685 y la IMU MPU6050
 A continuación se muestra el conexionado esquemático en formato de texto. El bus I2C (`GPIO 21` y `GPIO 22`) se deriva en paralelo hacia ambos dispositivos esclavos (`PCA9685` y `MPU6050`).
 
 ```text
-                           +---------------------------+
-                           |      BATERIA 2S 7.4V      |
-                           +-------------+-------------+
-                                         | (+7.4V)
-                                         v
-                           +---------------------------+
-                           |   REGULADOR UBEC 5V/3A    |
-                           +------+-------------+------+
-                                  |             |
-                    (5V Potencia) |             | (5V Control/Logica)
-                                  v             v
-  +------------------------------+       +------------------------------+
-  |     PCA9685 - Bornera V+     |       |         ESP32 - Vin          |
-  |     PCA9685 - Bornera GND ---+-------+--->     ESP32 - GND          |
-  +------------------------------+       +--------------+---------------+
-                                                        | (3.3V Regulado)
-                                                        v
-                                         +------------------------------+
-                                         |   MPU6050 (IMU) - VCC        |
-                                         |   MPU6050 (IMU) - GND --->GND|
-                                         +------------------------------+
+       [Pack Bat. A: 2x18650 (7.4V)] ──> [LM2596 #1 (Reg. a 6.0V)] ──> Riel VCC Servos (8x SG90)
+       [Pack Bat. B: 2x18650 (7.4V)] ──> [LM2596 #2 (Reg. a 5.0V)] ──> Vin ESP32 / Sensores
+       [GND Común Unificado] <─────────> GND salidas LM2596 #1, #2 y GND ESP32
 
   CONEXION DE SENALES (I2C y GPIOs):
   ==================================
-  ESP32 GPIO 21 (SDA) <---------+--------> PCA9685 SDA
-                                +--------> MPU6050 SDA
+  ESP32 GPIO 21 (SDA) <-----------------> MPU6050 SDA
   
-  ESP32 GPIO 22 (SCL) <---------+--------> PCA9685 SCL
-                                +--------> MPU6050 SCL
+  ESP32 GPIO 22 (SCL) <-----------------> MPU6050 SCL
   
   ESP32 GPIO 18 (TRIG) <----------------> HC-SR04 TRIG
   ESP32 GPIO 19 (ECHO) <----------------> HC-SR04 ECHO
@@ -231,7 +212,7 @@ Para llevar el **USS SpiderBot** a su culminación funcional y entrega exitosa e
 *   **Calibración Dinámica del MPU6050:** Ejecutar el calibrador inercial `calibrate_mpu.py` sobre una superficie plana para generar el archivo `mpu_offsets.txt`. Esto evitará derivas angulares y errores de auto-nivelación.
 
 ### 3. Ajuste Fino de la Marcha en Suelo (Gait Tuning)
-*   **Monitoreo de Consumo de Corriente:** Colocar el robot en el suelo y realizar pruebas de caminata monitoreando que el regulador UBEC de 3A no se sobrecaliente.
+*   **Monitoreo de Consumo de Corriente:** Colocar el robot en el suelo y realizar pruebas de caminata monitoreando que los reguladores LM2596 no se sobrecalienten y que los voltajes se mantengan estables en 6.0V (servos) y 5.0V (ESP32).
 *   **Ajuste de Amplitud de Paso:** Si el robot patina o pierde tracción en el suelo, ajustar los rangos angulares de empuje y avance en `caminar_adelante()` dentro de `main.py`. Reducir el ángulo Coxa FWD/BWD (por ejemplo, reducir el swing a $80^\circ - 100^\circ$ en lugar de $70^\circ - 110^\circ$) para suavizar la aceleración.
 *   **Ajuste del Coeficiente de Estabilización:** Variar la constante `FACTOR_COMPENSACION` en `main.py` si la nivelación inercial reacciona de forma muy lenta o muy brusca (con oscilaciones).
 

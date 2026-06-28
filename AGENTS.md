@@ -53,3 +53,15 @@ Debes crear o actualizar un directorio llamado `docs/` en la raíz del repositor
 ### Paso 4: Verificación de Calidad
 - Asegúrate de que todos los enlaces relativos entre los archivos de `docs/` funcionen correctamente.
 - Verifica que la sintaxis de los diagramas Mermaid sea totalmente válida y renderizable.
+
+---
+
+## 3. Integración con OpenCode y Gestión de Tokens
+
+Este proyecto se beneficia del ecosistema híbrido Antigravity/OpenCode:
+- **Delegación de Tareas:** Para evitar el consumo excesivo de tokens en Antigravity, delega la ejecución de la Wiki del Código (`CodeWiki`), auditoría y refactorización a **OpenCode**. Al asignar estas tareas, especifica el prompt estructurado en formato Markdown, la carpeta de ejecución y el modelo exacto a utilizar (seleccionado de acuerdo con la evaluación en `nvidia-models-analysis.md` en `/mnt/9b846436-0407-4e80-b8af-5417ffbdee8e/`).
+- **Modelos de NVIDIA Recomendados:**
+  - Para generación y actualización diaria de la Wiki local, indica a OpenCode el uso del modelo: `nvidia/qwen/qwen2.5-coder-32b-instruct`.
+  - Para arquitecturas altamente complejas o integraciones de APIs críticas, escala al modelo: `nvidia/qwen/qwen3-coder-480b-a35b-instruct`.
+
+
