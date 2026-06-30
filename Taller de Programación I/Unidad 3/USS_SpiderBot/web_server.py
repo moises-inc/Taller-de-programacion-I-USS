@@ -69,6 +69,7 @@ async def serve_html_file(writer, filename):
 async def handle_client(reader, writer):
     """Procesa las peticiones HTTP entrantes de forma asíncrona y no bloqueante."""
     try:
+        # Forzar recolección de basura al inicio de la petición para evitar fragmentación de RAM
         gc.collect()
         
         request_line = await reader.readline()
@@ -77,6 +78,7 @@ async def handle_client(reader, writer):
             
         req = request_line.decode('utf-8')
         
+        # Consumir el resto de las cabeceras HTTP para vaciar el buffer del socket
         while True:
             line = await reader.readline()
             if line == b'\r\n' or line == b'\n' or not line:
@@ -89,13 +91,16 @@ async def handle_client(reader, writer):
         method = parts[0]
         path = parts[1]
         
+        # ── ENDPOINT: API de Control de Movimiento y Estabilización ──
         if path.startswith("/api/control"):
+            # Buscar parámetro de comando: cmd=...
             if "cmd=" in path:
                 cmd = path.split("cmd=")[1].split("&")[0]
                 if cmd in ["forward", "backward", "left", "right", "stop", "reposo"]:
                     state.comando_actual = cmd
                     print(f"[WEB] Control recibido: {cmd}")
             
+            # Buscar parámetro de estabilización: stabilize=0 o 1
             if "stabilize=" in path:
                 stab = path.split("stabilize=")[1].split("&")[0]
                 state.estabilizacion_activa = (stab == "1")
@@ -111,6 +116,7 @@ async def handle_client(reader, writer):
             writer.write(b"Connection: close\r\n\r\n")
             writer.write(response.encode('utf-8'))
             
+        # ── ENDPOINT: API de Telemetría (Frecuencia de lectura externa ~4Hz) ──
         elif path.startswith("/telemetry"):
             response = '{"pitch":%.1f,"roll":%.1f,"distance":%.1f,"cmd":"%s","stabilize":%d,"estado_ia":"%s"}' % (
                 state.pitch_actual,
@@ -126,6 +132,7 @@ async def handle_client(reader, writer):
             writer.write(b"Connection: close\r\n\r\n")
             writer.write(response.encode('utf-8'))
             
+        # ── ENDPOINT: Servir HTML del Dashboard (Desde almacenamiento Flash) ──
         elif path == "/" or path == "/dashboard.html":
             await serve_html_file(writer, "dashboard.html")
         elif path == "/index.html":

@@ -104,7 +104,7 @@ alarma = BuzzerAlert(pin_number=14)
 
 clasificador_ia = IASensorClassifier()
 
-alarma.play_startup()
+alarma.play_startup() # Melodía rítmica de inicio para buzzer activo
 
 # ── 3. Definición de Canales de Servos y Poses ─────────────────────
 COXA_CHANNELS = [0, 2, 4, 6]
