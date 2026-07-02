@@ -60,7 +60,7 @@
     Facultad de Ingeniería\\
     \textbf{Universidad San Sebastián}
 }
-\date[Junio 2026]{23 de Junio, 2026}
+\date[Julio 2026]{1 de Julio, 2026}
 \titlegraphic{\includegraphics[width=4.5cm]{logo_uss.png}}
 
 % ─── Cuerpo de la Presentación ───────────────────────────────────────────────
@@ -76,7 +76,7 @@
     \begin{columns}
         \begin{column}{0.5\textwidth}
             \begin{block}{Definición de Proyecto}
-                El \textbf{USS SpiderBot} es un robot caminador cuadrúpedo de \textbf{8 grados de libertad (8-DoF)} orientado al reconocimiento autónomo en zonas de catástrofe y escombros.
+                El \textbf{USS SpiderBot} es un robot caminador cuadrúpedo de \textbf{4 grados de libertad (4-DoF)} orientado al reconocimiento autónomo en zonas de catástrofe y escombros.
             \end{block}
             \begin{block}{Desafío Tecnológico}
                 Sustituir ruedas por extremidades articuladas para sortear desniveles físicos de forma estable utilizando control de bucle cerrado.
@@ -132,7 +132,7 @@
         \end{column}
         \begin{column}{0.5\textwidth}
             \begin{center}
-                \includegraphics[height=5.2cm]{openscad_screenshot_6.png}
+                \includegraphics[height=4 cm]{Captura de pantalla de 2026-06-28 18-10-53.png}
                 \\ \vspace{0.1cm}
                 \small\color{USSBlue}\textit{Vista superior de la Placa Base Inferior en OpenSCAD}
             \end{center}
@@ -154,7 +154,7 @@
         \end{column}
         \begin{column}{0.5\textwidth}
             \begin{center}
-                \includegraphics[height=5.2cm]{openscad_screenshot_4.png}
+                \includegraphics[height=4 cm]{openscad_screenshot_4.png}
                 \\ \vspace{0.1cm}
                 \small\color{USSBlue}\textit{Vista isométrica de la Placa Base Superior en OpenSCAD}
             \end{center}
@@ -176,7 +176,7 @@
         \end{column}
         \begin{column}{0.5\textwidth}
             \begin{center}
-                \includegraphics[height=5.2cm]{openscad_screenshot_8.png}
+                \includegraphics[height=4 cm]{Captura de pantalla de 2026-06-28 18-11-58.png}
                 \\ \vspace{0.1cm}
                 \small\color{USSBlue}\textit{Diseño paramétrico del Eslabón Fémur en OpenSCAD}
             \end{center}
@@ -198,7 +198,7 @@
         \end{column}
         \begin{column}{0.5\textwidth}
             \begin{center}
-                \includegraphics[height=5.2cm]{openscad_screenshot_3.png}
+                \includegraphics[height=4 cm]{openscad_screenshot_3.png}
                 \\ \vspace{0.1cm}
                 \small\color{USSBlue}\textit{Diseño de la Tibia Curva en OpenSCAD}
             \end{center}
@@ -209,22 +209,48 @@
 % Slide 4: Arquitectura Electrónica
 \begin{frame}{Arquitectura Electrónica y Conexiones}
     \begin{columns}
-        \begin{column}{0.45\textwidth}
-            \begin{block}{Bus I2C Compartido}
-                El microcontrolador \textbf{ESP32 DevKit V1} comanda la lógica I2C en paralelo hacia dos esclavos:
+        \begin{column}{0.48\textwidth}
+            \begin{block}{Bus I2C y Señales PWM}
+                El microcontrolador \textbf{ESP32 DevKit V1} comanda directamente las señales y buses:
                 \begin{enumerate}
-                    \item \textbf{PCA9685 ($0x40$):} Driver PWM de 12-bit.
-                    \item \textbf{MPU6050 ($0x68$):} IMU de 6 ejes.
+                    \item \textbf{MPU6050 ($0x68$):} Lectura I2C de la IMU inercial de 6 ejes.
+                    \item \textbf{4x Servos PWM:} Control de posición directo por caderas en GPIOs (23, 17, 15, 13).
                 \end{enumerate}
             \end{block}
         \end{column}
-        \begin{column}{0.55\textwidth}
-            \begin{alertblock}{Aislamiento de Potencia (UBEC)}
+        \begin{column}{0.52\textwidth}
+        \begin{alertblock}{Alimentación Regulada Simplificada (LM2596)}
+            \begin{itemize}
+                \item \textbf{Pack 2x18650 (7.4V):} Un único portapilas dual provee la tensión de entrada al regulador.
+                \item \textbf{LM2596 (Regulado a 5.0V):} Un único módulo reductor step-down de alta eficiencia.
+                \item \textbf{Alimentación en Paralelo:} Suministro de 5.0V comunes para la ESP32 (lógica), sensores y actuadores (servos).
+                \item \textbf{GND Unificado:} Masa de referencia común para control y potencia.
+            \end{itemize}
+        \end{alertblock}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% Slide 4b: IA Sensorial Embebida
+\begin{frame}{IA Sensorial Embebida en ESP32}
+    \begin{columns}
+        \begin{column}{0.48\textwidth}
+            \begin{block}{Clasificador por Árbol de Decisión}
+                Ejecuta en tiempo real ($20\text{ Hz}$) sobre valores brutos del MPU6050:
                 \begin{itemize}
-                    \item Los 8 servos consumen picos de hasta $4\text{A}$ combinados.
-                    \item \textbf{UBEC (5V/3A):} Regula y separa la línea de fuerza externa de la bornera del PCA9685.
-                    \item Previene caídas de tensión y reinicios (*brownouts*) del procesador ESP32.
-                    \item \textbf{GND Unificado:} Referencia de voltaje común.
+                    \item \textbf{FALLEN:} Inclinación $> \pm 45^\circ$, caída libre ($|a| < 0.2g$) o impacto ($> 2.0g$).
+                    \item \textbf{PUSHED:} Reposo con giroscopio $> 120^\circ$/s (empuje externo).
+                    \item \textbf{SLIPPING:} Marcha sin variación inercial (patas en vacío).
+                    \item \textbf{NORMAL:} Operación estable.
+                \end{itemize}
+            \end{block}
+        \end{column}
+        \begin{column}{0.52\textwidth}
+            \begin{alertblock}{Reacción Autónoma en el Bucle}
+                \begin{itemize}
+                    \item Si \textbf{FALLEN}: Se aborta la marcha, los servos vuelven a pose segura y el buzzer emite alarma pulsante.
+                    \item Estado transmitido al dashboard web vía API \texttt{/telemetry} con indicación visual por colores (rojo intermitente para caída, naranja para perturbación/derrape, verde para normal).
+                    \item Sin falsos positivos: los umbrales se calibran para ignorar inclinación leve de la marcha de gateo.
                 \end{itemize}
             \end{alertblock}
         \end{column}
@@ -256,40 +282,42 @@
 \end{frame}
 
 % Slide 6: Marcha de Gateo
-\begin{frame}{Algoritmo de Locomoción: Marcha de Gateo (Crawl Gait)}
+\begin{frame}{Algoritmo de Locomoción: Marcha de Gateo 4-DoF}
     \begin{columns}
         \begin{column}{0.5\textwidth}
-            \begin{block}{Polígono de Sustentación}
-                Estabilidad estática garantizada: en fase de oscilación (swing), el centro de masa (CoM) siempre reside dentro del triángulo formado por los tres puntos de apoyo en el suelo.
+            \begin{block}{Oscilación Desfasada de Caderas}
+                Estabilidad estática óptima: el centro de gravedad reside de manera segura en el polígono de sustentación de 3 patas mientras la cuarta pata desliza su cadera en el aire.
             \end{block}
             \begin{block}{Ciclo Cinemático (5 Fases)}
-                Secuencia repetitiva: Stance Shift general $\rightarrow$ Paso Pata FR $\rightarrow$ Paso Pata RR $\rightarrow$ Paso Pata FL $\rightarrow$ Paso Pata RL.
+                Secuencia repetitiva: Paso Pata FR $\rightarrow$ Paso Pata RR $\rightarrow$ Paso Pata FL $\rightarrow$ Paso Pata RL $\rightarrow$ Empuje general del cuerpo hacia adelante (retroceso de todas las caderas).
             \end{block}
         \end{column}
         \begin{column}{0.5\textwidth}
             \begin{center}
                 \includegraphics[width=0.95\textwidth]{gait_simulation.png}
                 \\ \vspace{0.1cm}
-                \small\color{USSBlue}\textit{Perfiles de articulación simulados en Python}
+                \small\color{USSBlue}\textit{Perfiles de articulación de cadera asíncronos}
             \end{center}
         \end{column}
     \end{columns}
 \end{frame}
 
-% Slide 7: Estabilización Activa
-\begin{frame}{Lazo Cerrado de Estabilización Inercial Activa}
+% Slide 7: Optimización y Rediseño a 4-DoF
+\begin{frame}{Optimización y Rediseño a 4-DoF}
     \begin{columns}
-        \begin{column}{0.5\textwidth}
-            \begin{block}{Compensación Proporcional}
-                Inyección de offsets angulares dinámicos en los servos de rodilla (fémures) de las patas en contacto:
-                $$\theta_{compensado} = \theta_{base} \pm (K_p \cdot \theta_{sensor})$$
-                Donde el coeficiente $K_p = 1.2$ compensa proporcionalmente la caída del chasis medida por la IMU a $20\text{ Hz}$.
+        \begin{column}{0.55\textwidth}
+            \begin{block}{Justificación del Rediseño}
+                Ante restricciones de tiempo de fabricación y fatiga de materiales en rodillas, se eliminaron los 4 servos fémur, fijando mecánicamente las rodillas a $90^\circ$ (escuadra rígida).
             \end{block}
-            \begin{block}{Tolerancia Activa}
-                La compensación se activa si la inclinación medida supera la banda muerta de $\pm 3^\circ$.
+            \begin{block}{Ventajas del Sistema Simplificado}
+                \begin{itemize}
+                    \item \textbf{Consumo Eléctrico:} Reducción del $50\%$ en la corriente pico (de $3.0\text{ A}$ a $1.5\text{ A}$).
+                    \item \textbf{Carga Útil:} Mayor autonomía de batería y menor peso muerto del robot.
+                    \item \textbf{Failsafe Activo:} La IMU sigue vigilando la estabilidad y gatilla parada segura por IA ante colisiones.
+                \end{itemize}
             \end{block}
         \end{column}
-        \begin{column}{0.5\textwidth}
+        \begin{column}{0.45\textwidth}
             \begin{center}
                 \includegraphics[width=0.95\textwidth]{stabilization_response.png}
                 \\ \vspace{0.1cm}
@@ -329,8 +357,8 @@
         \begin{column}{0.5\textwidth}
             \begin{block}{Simulador Virtual Wokwi}
                 \begin{itemize}
-                    \item Cableado digital completo de 8 servos y sensores en \codigo{diagram.json}.
-                    \item \textbf{Control Fallback Directo:} En ausencia del expansor PCA9685, el firmware conmuta a modulación PWM nativa de la ESP32.
+                    \item Cableado digital completo de 4 servos y sensores en \codigo{diagram.json}.
+                    \item \textbf{Control Directo por GPIO:} Modulación PWM nativa de la ESP32 hacia los servos en canales específicos de simulación.
                     \item Conexión a través del canal virtual `Wokwi-GUEST` para interactuar con el servidor real.
                 \end{itemize}
             \end{block}

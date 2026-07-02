@@ -1,83 +1,37 @@
----
-title: Code Wiki - MicroPython ESP32 Projects
-date: 2026-06-11
-tags:
-  - micropython
-  - esp32
-  - documentation
-  - workshop
-aliases:
-  - Wiki Index
-  - Project Documentation
----
+# USS SpiderBot — Wiki Técnica de Código
 
-# Code Wiki: MicroPython ESP32 Projects (Taller de Programación I)
+Bienvenido a la wiki técnica del **USS SpiderBot**, un robot caminador cuadrúpedo simplificado de **4 grados de libertad (4-DoF)** desarrollado para la asignatura de **Taller de Programación I (Universidad San Sebastián)**. 
 
-> [!info] Resumen Ejecutivo
-> Este repositorio contiene los scripts desarrollados para la asignatura **Taller de Programación I** (Universidad San Sebastián), correspondientes a la **Solemne 3**. Los códigos están escritos en **MicroPython** para la plataforma **ESP32** y cubren ejercicios progresivos de control de GPIO, sensores ultrasónicos, control de motores DC y semáforos inteligentes.
+Este robot ha sido diseñado con estabilidad inercial activa para desplazarse de forma segura sobre terrenos rugosos o inclinados, prevención reactiva de colisiones frontales y un panel de control remoto web asíncrono y offline accesible desde cualquier navegador. Las rodillas se fijan mecánicamente a 90°, reduciendo la complejidad eléctrica y de firmware sin sacrificar la marcha de gateo funcional.
 
 ---
 
-## 🛠 Stack Tecnológico
+## 🚀 Stack Tecnológico
 
-| Categoría | Tecnología / Librería | Versión / Detalle |
-|-----------|----------------------|-------------------|
-| **Lenguaje** | MicroPython | Optimizado para ESP32 |
-| **Plataforma** | Espressif ESP32 | ESP32 DevKit V1 / WROOM-32 |
-| **IDE** | Thonny IDE | MicroPython plugin |
-| **Librerías Core** | `machine`, `utime`/`time` | Estándar MicroPython |
-| **Hardware** | LEDs, Pulsadores, HC-SR04, L298N, Buzzer | Ver [MODULES.md](MODULES.md#configuraci%C3%B3n-de-pines) |
+El proyecto integra tecnologías de hardware embebido, desarrollo web nativo y modelado tridimensional paramétrico:
 
----
-
-## 📂 Tabla de Contenidos
-
-| Documento | Descripción |
-|-----------|-------------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Vista global de arquitectura, diagramas de flujo y patrones de diseño |
-| [MODULES.md](MODULES.md) | Diccionario detallado de módulos, funciones y dependencias |
-| [guia_impresion_3d.md](guia_impresion_3d.md) | Guía de impresión 3D y configuración de perfiles en Creality Print |
-| [guia_openscad.md](guia_openscad.md) | Guía completa de OpenSCAD: del cubo al robot cuadrúpedo y simulaciones |
-| [informe\_proyecto\_spiderbot.tex](informe_proyecto_spiderbot.tex) / [PDF](informe_proyecto_spiderbot.pdf) | Informe técnico final del proyecto SpiderBot (evaluación Solemne 3) |
-| [presentacion\_hall\_spiderbot.tex](presentacion_hall_spiderbot.tex) / [PDF](presentacion_hall_spiderbot.pdf) | Presentación LaTeX Beamer de apoyo visual para el hall |
+*   **Microcontrolador principal:** ESP32 DevKit V1 (38 pines) ejecutando **MicroPython v1.20+**.
+*   **Locomoción y multitarea:** Concurrencia cooperativa no bloqueante mediante la librería estándar **`uasyncio` (asyncio)** de MicroPython.
+*   **Actuadores:** 4x Servomotores analógicos SG90/MG90S (solo caderas) controlados directamente mediante señales PWM por pines GPIO de la ESP32, sin multiplexor PCA9685. Las rodillas se fijan mecánicamente a 90°.
+*   **Sensores:**
+    *   Unidad de Medida Inercial (IMU) **MPU6050** de 6 ejes para el cálculo dinámico de inclinación (Pitch y Roll).
+    *   Sensor ultrasónico de distancia **HC-SR04** para evasión de obstáculos.
+*   **Interfaz de Control Remoto:** Servidor HTTP embebido asíncrono en socket TCP (puerto 80) que sirve un Dashboard web en HTML5, CSS3 Glassmorphism y Vanilla JavaScript (sin CDNs, 100% offline).
+*   **Modelado 3D Estructural:** Piezas paramétricas imprimibles en FDM modeladas íntegramente en **OpenSCAD**.
 
 ---
 
-## 🚀 Ejercicios Implementados
+## 📚 Tabla de Contenidos de la Wiki
 
-| # | Script | Descripción | Pines Principales |
-|---|--------|-------------|-------------------|
-| 1 | `ejercicio1_led.py` | Parpadeo básico de LED (Blink) | GPIO 2 |
-| 2 | `Ejercicio 2.py` | Semáforo inteligente con botón y buzzer | GPIO 0-4 |
-| 3 | `ejercicio3_pulsador.py` | Control de LED con pulsador (PULL_UP) | GPIO 2, 4 |
-| 4 | `semaforo_inteligente.py` | Secuencia semáforo temporizada (3 LEDs) | GPIO 21, 22, 23 |
-| 5 | `alarma_ultrasonica.py` | Alarma por proximidad (HC-SR04 + LED + Buzzer) | GPIO 2, 5, 15, 18 |
-| 6 | `sonar_sensor.py` | Módulo reutilizable de lectura HC-SR04 | GPIO 18, 19 |
-| 7 | `motor_control.py` | Control motores DC con puente H L298N + PWM | GPIO 12-17 |
+Navega a través de las secciones de documentación técnica de este repositorio:
 
----
-
-## 📋 Patrones de Diseño Identificados
-
-- **Modularidad**: Separación de configuración, lógica y bucle principal
-- **Inicialización Segura**: Estados por defecto `OFF`/`LOW` al arranque
-- **Manejo de Interrupciones**: `try/except KeyboardInterrupt` para apagado limpio
-- **Debounce por Software**: `sleep_ms(50)` en lecturas de entrada digital
-- **Funciones Puras**: Lógica de negocio separada de I/O hardware
+1.  **[Arquitectura General e Inferencia de Postura](ARCHITECTURE.md):** Conoce el flujo de ejecución asíncrono, la teoría de la marcha de gateo (Crawl Gait) para 4 caderas y la lógica matemática de la estabilización inercial activa.
+2.  **[Diccionario de Componentes y Módulos](MODULES.md):** Detalle de cada archivo de código fuente, sus responsabilidades, funciones principales, variables físicas y dependencias internas de importación.
+3.  **[Guía de Impresión 3D y Creality Print](guia_impresion_3d.md):** Parámetros de laminación (infill, perfiles de PLA/PETG, recuentos de pared) y distribución de piezas por platos de impresión en la cama.
+4.  **[Guía Completa de OpenSCAD: Del Cubo al Robot Cuadrúpedo](guia_openscad.md):** Tutorial exhaustivo de OpenSCAD desde cero usando el SpiderBot como caso de estudio real, con ejemplos funcionales extraídos de `cad/`.
+5.  **[Informe Técnico Final (TeX)](informe_proyecto_spiderbot.tex) / [PDF Compilado](informe_proyecto_spiderbot.pdf):** Documento académico final del proyecto SpiderBot (evaluación Solemne 3), cubriendo diseño mecánico, electrónica, firmware multitarea y simulación.
+6.  **[Presentación del Hall (TeX)](presentacion_hall_spiderbot.tex) / [PDF Compilado](presentacion_hall_spiderbot.pdf):** Diapositivas académicas de apoyo visual diseñadas en LaTeX Beamer para exhibición en el hall de la universidad.
 
 ---
 
-## 🔗 Enlaces Rápidos
-
-- [Ver Arquitectura](ARCHITECTURE.md)
-- [Ver Módulos](MODULES.md)
-- [Guía OpenSCAD](guia_openscad.md) (y [PDF compilado](guia_openscad.pdf))
-- [Informe Técnico Final (PDF)](informe_proyecto_spiderbot.pdf)
-- [Presentación del Hall (PDF)](presentacion_hall_spiderbot.pdf)
-- [Task Board](_Agent_Sync/Task_Board)
-- [Active Context](_Agent_Sync/Active_Context)
-
----
-
-🔗 [[_Agent_Sync/Task_Board]]
-🔗 [[_Agent_Sync/Active_Context]]
+*Desarrollado en la Universidad San Sebastián. Año 2026.*

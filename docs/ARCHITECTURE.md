@@ -1,212 +1,87 @@
----
-title: Architecture - MicroPython ESP32 Projects
-date: 2026-06-11
-tags:
-  - architecture
-  - micropython
-  - esp32
-aliases:
-  - System Architecture
-  - Technical Design
----
+# Arquitectura General y Flujos — USS SpiderBot
 
-# Arquitectura del Sistema
-
-> [!info] Visión General
-> Los scripts siguen una arquitectura **basada en bucles de eventos (event-loop)** típica de sistemas embebidos sin RTOS. Cada script es autónomo, sin dependencias cruzadas entre ejercicios, pero comparten patrones comunes de inicialización, bucle principal y limpieza.
+Esta sección describe la arquitectura lógica del firmware, el flujo de procesamiento de señales en paralelo, las modalidades adaptativas para simulación en Wokwi y los patrones de diseño de software aplicados.
 
 ---
 
-## Diagrama General de Arquitectura
+## 1. Diagrama de Bloques de la Arquitectura (Mermaid.js)
+
+El firmware utiliza la concurrencia asíncrona cooperativa en MicroPython. Tres corrutinas corren de forma concurrente, comunicándose a través de un registro de estado centralizado. 
+
+### Ejecución Adaptativa (Detección del Entorno)
+El sistema detecta automáticamente si se encuentra en el robot físico o en Wokwi escaneando las redes Wi-Fi locales en busca de la red virtual `"Wokwi-GUEST"`:
+1.  **Modo Hardware Real:** Configura el Wi-Fi como **Access Point (AP)** privado (`USS_SpiderBot_AP`) y realiza lecturas de la IMU física MPU6050 a través de I2C a 100kHz. Los 4 servos de cadera son comandados directamente por GPIOs (23, 17, 15, 13) a través de `ESP32ServoDirect`.
+2.  **Modo Simulación:** Configura el Wi-Fi como **Estación (STA)** conectándose a `Wokwi-GUEST` para permitir el acceso al simulador. Los servos son controlados con los mismos pines GPIO a través del generador PWM directo.
 
 ```mermaid
 graph TD
-    subgraph "Capa de Aplicación"
-        Main[Main Loop<br/>while True]
-        Logic[Lógica de Negocio<br/>Funciones puras]
+    %% Clientes de Red (Exteriores)
+    subgraph Dispositivos Clientes
+        A[Laptop A - Dashboard UI]
+        B[Laptop B - Motor de IA]
     end
-    
-    subgraph "Capa de Hardware Abstraction"
-        GPIO[GPIO Control<br/>machine.Pin]
-        PWM[PWM Control<br/>machine.PWM]
-        Time[Timing<br/>utime/time]
-        Sensors[Sensores Especiales<br/>time_pulse_us]
+
+    %% Servidor y Registro de Estado (ESP32)
+    subgraph Firmware Embebido ESP32
+        C[web_server.py - Servidor HTTP]
+        D[state.py - Registro Global Compartido]
+        E[main.py - Tarea Locomoción]
+        F[main.py - Tarea Sensores 20Hz]
     end
-    
-    subgraph "Periféricos Físicos"
-        LED[LEDs<br/>Actuadores]
-        BTN[Pulsadores<br/>Entradas]
-        US[HC-SR04<br/>Ultrasonido]
-        MOT[Motores DC<br/>L298N]
-        BZ[Buzzer<br/>PWM Audio]
+
+    %% Actuación (4-DoF: solo caderas)
+    G[ESP32ServoDirect - Controlador 4 Servos GPIO]
+
+    %% Sensores e Interfaces de Red
+    subgraph Sensores e interfaces
+        H[MPU6050 - IMU Inercial I2C 100kHz]
+        I[HC-SR04 - Sonar Ultrasonido]
+        J1[AP Wi-Fi Local - Físico]
+        J2[Wokwi-GUEST - Wi-Fi Virtual]
     end
+
+    %% Flujos de Red
+    A <-->|HTTP GET/POST /telemetry| C
+    B -->|HTTP GET /api/control?cmd=...| C
+    C <-->|Lee/Escribe Estado| D
+    E <-->|Monitorea comando / actualiza| D
+    F <-->|Escribe Pitch/Roll/Distancia/Estado IA| D
     
-    Main --> Logic
-    Logic --> GPIO
-    Logic --> PWM
-    Logic --> Time
-    Logic --> Sensors
-    GPIO --> LED
-    GPIO --> BTN
-    PWM --> MOT
-    PWM --> BZ
-    Sensors --> US
-    Time --> Main
-```
-
----
-
-## Flujo de Datos Global
-
-```mermaid
-sequenceDiagram
-    participant Boot as Boot/Import
-    participant Init as Inicialización HW
-    participant Loop as Main Loop
-    participant Logic as Lógica de Control
-    participant HW as Hardware I/O
-    participant Clean as Cleanup
+    %% Ruta de Wi-Fi según entorno
+    C <-->|Modo AP| J1
+    C <-->|Modo STA| J2
     
-    Boot->>Init: Cargar módulos (machine, utime)
-    Init->>Init: Configurar pines (IN/OUT/PWM)
-    Init->>Init: Establecer estados seguros (OFF/LOW)
-    Init->>Loop: Entrar al bucle infinito
-    
-    loop Cada Iteración
-        Loop->>Logic: Leer sensores / Evaluar condiciones
-        Logic->>HW: Escribir actuadores (LED, Motor, Buzzer)
-        HW-->>Logic: Confirmación implícita
-        Loop->>Time: Sleep / Delay (yield CPU)
-    end
-    
-    Note over Loop,Time: Interrupción (Ctrl+C)
-    Loop->>Clean: KeyboardInterrupt
-    Clean->>HW: Apagar salidas (Seguridad)
-    Clean->>Boot: Exit
+    %% Acciones de Hardware/Simulación (4-DoF)
+    E -->|Fórmula Gait + Compensación| G
+    G -->|4x PWM a 50Hz| J3[4x Servomotores SG90/MG90S<br/>Solo Caderas - Rodillas fijas 90°]
+    F -->|Lectura I2C 100kHz| H
+    F -->|Lectura GPIO Pulso 5ms timeout| I
+    F -->|Clasifica estado| K[classifier_ia.py<br/>Decision Tree]
+    K -->|FALLEN/PUSHED/SLIPPING/NORMAL| D
 ```
 
 ---
 
-## Patrones de Diseño Identificados
+## 2. Flujo de Datos Global (Request-Response & Control Loop)
 
-### 1. **Factory Pattern (Implícito) - `setup_*` functions**
-```python
-# ejercicio1_led.py:13-24
-def setup_led(pin_number) -> machine.Pin:
-    return machine.Pin(pin_number, machine.Pin.OUT)
+La información fluye a través del sistema mediante un modelo desacoplado por estado:
 
-# ejercicio3_pulsador.py:14-29
-def setup_components() -> tuple[machine.Pin, machine.Pin]:
-    led = machine.Pin(2, machine.Pin.OUT)
-    pulsador = machine.Pin(4, machine.Pin.IN, machine.Pin.PULL_UP)
-    return led, pulsador
-```
-- Encapsula la configuración de hardware
-- Permite reutilización y testing
-
-### 2. **Command Pattern - Funciones de Acción Atómicas**
-```python
-# motor_control.py:41-89
-def avanzar(velocidad: int = 60): ...
-def retroceder(velocidad: int = 60): ...
-def girar_izquierda(velocidad: int = 50): ...
-def girar_derecha(velocidad: int = 50): ...
-def detener(): ...
-```
-- Cada función es un "comando" completo
-- Facilita secuencias complejas
-
-### 3. **Guard Clause - Validación Temprana**
-```python
-# sonar_sensor.py:30-33
-if duracion_us < 0:
-    return -1  # Error temprano
-
-# alarma_ultrasonica.py:42-55
-if distancia != -1:
-    # Lógica principal
-else:
-    print("Lectura fuera de rango.")
-```
-
-### 4. **Resource Acquisition Is Initialization (RAII) - Try/Finally Implícito**
-```python
-# Todos los scripts principales
-try:
-    while True:
-        # Lógica principal
-except KeyboardInterrupt:
-    led.value(0)  # Limpieza garantizada
-    print("Ejecución detenida por el usuario.")
-```
-
-### 5. **Debounce por Software - Polling con Delay**
-```python
-# ejercicio3_pulsador.py:62
-utime.sleep_ms(50)  # Antirrebote básico
-
-# Ejercicio 2.py:57
-sleep(0.1)  # Pequeña pausa para evitar rebotes
-
-# alarma_ultrasonica.py:58
-sleep_ms(200)  # Evitar colisión de ecos
-```
+1.  **Lectura Frecuente (Lazo de Entrada):** La tarea asíncrona `sensor_updater()` corre de forma continua cada 50ms (20Hz). Lee los datos brutos del sensor ultrasónico (con timeout de 5ms y backoff adaptativo a 0.5Hz tras 5 fallos consecutivos) y de la IMU MPU6050 por I2C a 100kHz. Actualiza `state.pitch_actual`, `state.roll_actual`, `state.distancia_actual` y `state.estado_ia` (clasificado por el Decision Tree de `classifier_ia.py`) en el módulo [state.py](file:///mnt/9b846436-0407-4e80-b8af-5417ffbdee8e/Github/USS%20SPIDERBOT%20(solemne%203)/firmware/state.py).
+2.  **Peticiones del Operador (Entrada por Red):** Cuando el usuario interactúa con la página web o un modelo de IA en la laptop, se envía una petición Fetch a `/api/control?cmd=forward`.
+3.  **Procesamiento HTTP (Asíncrono con GC Lazy):** El servidor HTTP asíncrono en `web_server.py` procesa la petición de forma no bloqueante y escribe el comando en `state.comando_actual`. Tras enviar la respuesta, ejecuta `gc.collect()` solo si la memoria RAM libre es inferior a 15KB (`gc.mem_free() < 15000`), desplazando la recolección de basura a segundo plano y minimizando la latencia de respuesta.
+4.  **Bucle de Decisión y Control (Locomoción):** La corrutina `locomotion_loop()` en `main.py` vigila permanentemente el estado de las variables físicas y los comandos:
+    *   **Prioridad 1 (Detección de Caída por IA):** Si `state.estado_ia == "FALLEN"`, la corrutina detiene la marcha inmediatamente, emite alerta acústica de postura y fuerza `state.comando_actual = "stop"`.
+    *   **Prioridad 2 (Freno de Emergencia):** Si `state.distancia_actual < 15.0`, la corrutina detiene inmediatamente la marcha, emite alertas sonoras con el Buzzer y fuerza `state.comando_actual = "stop"`.
+    *   **Prioridad 3 (Locomoción):** Si el comando es `"forward"`, ejecuta un paso de la caminata de gateo (Crawl Gait) interpolando las 4 caderas.
+    *   **Prioridad 4 (Estabilización Dinámica):** Al mover las articulaciones, se consultan `state.pitch_actual` y `state.roll_actual` para calcular y aplicar en tiempo real correcciones angulares sobre las caderas en apoyo, manteniendo estable el chasis.
 
 ---
 
-## Configuración de Pines por Ejercicio
+## 3. Patrones de Diseño de Software Aplicados
 
-| Ejercicio | GPIO | Función | Modo | Comentario |
-|-----------|------|---------|------|------------|
-| 1. Blink | 2 | LED integrado | OUT | LED built-in ESP32 |
-| 2. Semáforo+Btn | 0,1,2 | LEDs R/A/V | OUT | Ánodo común a GPIO |
-| 2. Semáforo+Btn | 3 | Botón peatón | IN, PULL_DOWN | Activo en HIGH |
-| 2. Semáforo+Btn | 4 | Buzzer | PWM | 50% duty cycle |
-| 3. Pulsador | 2 | LED | OUT | Controlado por botón |
-| 3. Pulsador | 4 | Pulsador | IN, PULL_UP | Activo en LOW |
-| 4. Semáforo Simple | 21,22,23 | LEDs V/A/R | OUT | Secuencia temporizada |
-| 5. Alarma US | 5 | Trigger US | OUT | Pulso 10µs |
-| 5. Alarma US | 18 | Echo US | IN | Medición tiempo |
-| 5. Alarma US | 2 | LED Alarma | OUT | Rojo |
-| 5. Alarma US | 15 | Buzzer | OUT | Alarma sonora |
-| 6. Sonar Sensor | 18 | Trigger | OUT | Módulo reutilizable |
-| 6. Sonar Sensor | 19 | Echo | IN | Timeout 20ms |
-| 7. Motor Control | 12,13 | IN1, IN2 | OUT | Motor Izquierdo |
-| 7. Motor Control | 14 | ENA | PWM | Velocidad Izq (1kHz) |
-| 7. Motor Control | 15,16 | IN3, IN4 | OUT | Motor Derecho |
-| 7. Motor Control | 17 | ENB | PWM | Velocidad Der (1kHz) |
-
----
-
-## Métricas de Complejidad
-
-| Script | Líneas | Funciones | Complejidad Ciclomática | Patrones |
-|--------|--------|-----------|------------------------|----------|
-| ejercicio1_led.py | 60 | 3 | 2 | Factory, RAII |
-| ejercicio3_pulsador.py | 70 | 3 | 3 | Factory, RAII, Debounce |
-| semaforo_inteligente.py | 30 | 0 | 1 | Secuencial simple |
-| Ejercicio 2.py | 57 | 2 | 4 | Command, State Machine |
-| alarma_ultrasonica.py | 58 | 1 | 3 | Guard Clause, RAII |
-| sonar_sensor.py | 84 | 2 | 4 | Factory, Guard Clause |
-| motor_control.py | 108 | 7 | 2 | Command, Factory |
-
----
-
-## Consideraciones de Rendimiento (MicroPython/ESP32)
-
-> [!warning] Limitaciones Conocidas
-> - **GIL**: MicroPython tiene GIL, no hay verdadero paralelismo
-> - **GC**: Recolección de basura no determinística → evitar alloc en loop
-> - **Timing**: `sleep_us`/`sleep_ms` no son precisos bajo carga
-> - **PWM**: Frecuencia fija 1kHz en L298N, resolución 16-bit (0-65535)
-
-### Optimizaciones Aplicadas
-1. **Pre-cálculo de constantes** fuera del loop (`duty_u16` scaling)
-2. **Reutilización de objetos Pin** (no re-instanciar en loop)
-3. **Lecturas agrupadas** (mínimas transacciones I/O por iteración)
-4. **Timeouts en sensores** (evitan bloqueo infinito en `time_pulse_us`)
-
----
-
-🔗 [[_Agent_Sync/Task_Board]]
-🔗 [[_Agent_Sync/Active_Context]]
+*   **Multitarea Cooperativa (Cooperative Multitasking):** Implementada a través del bucle de eventos asíncrono de `uasyncio`. En lugar de utilizar retardos bloqueantes (`time.sleep_ms`) o hilos físicos del procesador (que consumen demasiados recursos de memoria y son inestables en MicroPython), las tareas liberan la CPU cediéndola voluntariamente a otras mediante `await asyncio.sleep_ms()`.
+*   **Patrón Shared Registry (Estado Singleton):** Centralizado en [state.py](file:///mnt/9b846436-0407-4e80-b8af-5417ffbdee8e/Github/USS%20SPIDERBOT%20(solemne%203)/firmware/state.py). Permite desacoplar por completo la ejecución física de los servomotores de las peticiones de red del servidor HTTP, solucionando la importación circular de módulos.
+*   **Control Reactivo Proporcional (P-Control):** La estabilización inercial activa calcula la corrección mediante un factor de escala estático multiplicativo respecto a la desviación angular ($\Delta \text{Ángulo} \times \text{Factor}$). Esto imita la lógica básica de control proporcional industrial, brindando respuestas inmediatas y suaves sin sobrecarga matemática.
+*   **Abstracción de Control Directo (Hardware/Simulador):** La clase `ESP32ServoDirect` unifica la interfaz de control de los servomotores a través del método `.set_servo_angle()`. Esta capa oculta la modulación PWM nativa de 16 bits de MicroPython (`duty_u16`), permitiendo que el algoritmo de locomoción opere con los mismos comandos y mapeos físicos tanto en el simulador Wokwi como en el hardware real.
+*   **Recolección de Basura Diferida (GC Lazy):** Implementado en `web_server.py`. La GC se ejecuta solo si la memoria libre baja de 15KB (`gc.mem_free() < 15000`) tras servir la respuesta HTTP. Esto evita pausas de latencia impredecibles durante la marcha o la telemetría.
+*   **Backoff Adaptativo de Sonar:** El lazo `sensor_updater()` en `main.py` reduce la frecuencia de lectura del HC-SR04 de 20Hz a 0.5Hz (cada 40 ciclos) si se producen 5 timeouts consecutivos del sensor (5ms por pulso), evitando el bloqueo prolongado de la CPU por fallos del hardware.
